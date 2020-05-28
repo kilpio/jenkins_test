@@ -22,55 +22,78 @@ node {
     stage('Fabric-Starter-projects-Snapshot') {
 
         def newFabricStarterTag
-
+        //Building fabric-tools-extended image
         stage('Fabric-tools-extended') {
+            // git@github.com:${GIT_REPO_OWNER}/${repositoryName}.git 
+            // Wiping out workspace first.
+            // Cloning repository git@github.com:${GIT_REPO_OWNER}/fabric-starter.git
+            // checkout 'master' and 'stable' branches 
             checkoutFromGithubToSubfolder('fabric-starter', "${BUILD_BRANCH}")
-            // sh("cp -r build/chaincode/node/dns fabric-starter/chaincode/node")
-
+            //// sh("cp -r build/chaincode/node/dns fabric-starter/chaincode/node")
+            
+            // cd /var/jenkins_home/workspace/[_test_]/fabric-starter
             dir('fabric-starter') {
                 if (AUTO_MERGE_FROM_MASTER) {
-
+                    //                             
                     sh "git config user.name ${GIT_REPO_OWNER}"
+                    // Switche to the branch 'master'
                     sh "git checkout master"
+                    // Update local version from remote
                     sh "git pull"
+                    // Switche to the branch 'stable'
                     sh "git checkout ${BUILD_BRANCH}"
+                    // Update local version from remote
                     sh "git pull"
-
+                    // Overwrite the contents of the files in '.' (overwrite working tree ('stable') with the contents in the index ('master'))
                     sh "git checkout master -- ."
+                    // Commit changes (to the branch 'stable'), do not push to github yet
                     sh "git commit -m 'Stable branch along with ${newFabricStarterTag}' || true"
             }
+                // Evaluate next snapshot name for Fabric-starter: ${branchPrefix}-${majorVer}.${minorVersion + 1}-${FABRIC_VERSION}
                 newFabricStarterTag = evaluateNextSnapshotGitTag('Fabric-starter')
+                // docker build -> fabric-tools-extended:newFabricStarterTag
+                // push it as fabric-tools-extended:newFabricStarterTag and as fabric-tools-extended:latest
                 buildAndPushDockerImage("fabric-tools-extended", newFabricStarterTag, "--no-cache --build-arg=FABRIC_VERSION=${FABRIC_VERSION} -f fabric-tools-extended/Dockerfile .")
             }
         }
-
+        //Building fabric-starter-rest image
         stage("Build Stable docker image of fabric-starter-rest") {
-
+            // Wiping out workspace first.
+            // Cloning repository git@github.com:${GIT_REPO_OWNER}/fabric-starter-rest.git
+            // checkout 'master' and 'stable' branches 
             checkoutFromGithubToSubfolder('fabric-starter-rest')
-
+            
+            // cd /var/jenkins_home/workspace/[_test_]/fabric-starter-rest
             dir('fabric-starter-rest') {
+                // docker build -> fabric-starter-rest: newFabricStarterTag
+                // push it as fabric-starter-rest:newFabricStarterTag and as fabric-starter-rest:latest
                 buildAndPushDockerImage('fabric-starter-rest', newFabricStarterTag, "--no-cache -f Dockerfile .")
             }
         }
 
         stage('Fabric-Starter') {
             stage('Snapshot fabric-starter') {
-//                checkoutFromGithubToSubfolder('fabric-starter')
+////                checkoutFromGithubToSubfolder('fabric-starter')
 
                 dir('fabric-starter') {
                     sshagent(credentials: ["${GITHUB_SSH_CREDENTIALS_ID}"]) {
-                        sh "git checkout -B ${newFabricStarterTag}"
+                        sh "git checkout -B ${newFabricStarterTag}" // create new branch if it does not exist
                         sh "git config user.name ${GIT_REPO_OWNER}"
-                        def fileContent = readFile '.env'
+                        def fileContent = readFile '.env'           //changing .env file
+                        //appending FABRIC_STARTER_VERSION and FABRIC_VERSION after the last line
                         writeFile file: '.env', text: "${fileContent}\nFABRIC_STARTER_VERSION=${newFabricStarterTag}\nFABRIC_VERSION=${FABRIC_VERSION}"
                         sh "git add .env"
-
+                        // modifing yamls
+                        // by replacing 'latest' with approps
                         updateComposeFilesWithVersions(FABRIC_VERSION, newFabricStarterTag)
 
                         sh "git commit -m 'Snapshot ${newFabricStarterTag}'"
+                        // push to the remote newFabricStarterTag branch
+                        // now newFabricStarterTag branch set up to track remote branch newFabricStarterTag from origin
                         sh("git push -u origin ${newFabricStarterTag}")
 
-                        sh "git checkout ${BUILD_BRANCH}"
+                        sh "git checkout ${BUILD_BRANCH}" //Switched to branch 'stable'
+                        // We do not specify remote or branch here
                         sh "git push"
                     }
                 }
@@ -78,6 +101,7 @@ node {
         }
 
         stage('Snapshot fabric-starter-rest') {
+            //new snapshot branch for the fabric-starter-rest
             dir('fabric-starter-rest') {
                 sshagent(credentials: ["${GITHUB_SSH_CREDENTIALS_ID}"]) {
                     sh "git checkout -B ${newFabricStarterTag}"
