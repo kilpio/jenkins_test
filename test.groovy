@@ -18,7 +18,6 @@
 
 
 node {
-
     stage('Fabric-Starter-projects-Snapshot') {
 
         def newFabricStarterTag
@@ -31,6 +30,9 @@ node {
             checkoutFromGithubToSubfolder('fabric-starter', "${BUILD_BRANCH}")
             //// sh("cp -r build/chaincode/node/dns fabric-starter/chaincode/node")
             
+                // Evaluate next snapshot name for Fabric-starter: ${branchPrefix}-${majorVer}.${minorVersion + 1}-${FABRIC_VERSION}
+                newFabricStarterTag = evaluateNextSnapshotGitTag('Fabric-starter')
+
             // cd /var/jenkins_home/workspace/[_test_]/fabric-starter
             dir('fabric-starter') {
                 if (AUTO_MERGE_FROM_MASTER) {
@@ -49,8 +51,6 @@ node {
                     // Commit changes (to the branch 'stable'), do not push to github yet
                     sh "git commit -m 'Stable branch along with ${newFabricStarterTag}' || true"
             }
-                // Evaluate next snapshot name for Fabric-starter: ${branchPrefix}-${majorVer}.${minorVersion + 1}-${FABRIC_VERSION}
-                newFabricStarterTag = evaluateNextSnapshotGitTag('Fabric-starter')
                 // docker build -> fabric-tools-extended:newFabricStarterTag
                 // push it as fabric-tools-extended:newFabricStarterTag and as fabric-tools-extended:latest
                 buildAndPushDockerImage("fabric-tools-extended", newFabricStarterTag, "--no-cache --build-arg=FABRIC_VERSION=${FABRIC_VERSION} -f fabric-tools-extended/Dockerfile .")
@@ -88,7 +88,7 @@ node {
                         updateComposeFilesWithVersions(FABRIC_VERSION, newFabricStarterTag)
 
                         sh "git commit -m 'Snapshot ${newFabricStarterTag}'"
-                        // push to the remote newFabricStarterTag branch
+                        // push to the remote new newFabricStarterTag branch
                         // now newFabricStarterTag branch set up to track remote branch newFabricStarterTag from origin
                         sh("git push -u origin ${newFabricStarterTag}")
 
@@ -126,6 +126,7 @@ private void buildAndPushDockerImage(imageName, tag, def args = '') {
         fabricRestImage = docker.image("${DOCKER_REPO}/${imageName}:${tag}")
         fabricRestImage.push()
         fabricRestImage.push('latest')
+        fabricRestImage.push('stable')
     }
 }
 
